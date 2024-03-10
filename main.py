@@ -10,7 +10,6 @@ import os
 from dotenv import load_dotenv
 
 
-
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
@@ -44,11 +43,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Good Day! Welcome to PTSS Learner Bot! Type /attendance to input your attendance!")
 
 
-
 # START OF ATTENDANCE FUNCTION
 async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['chat_id'] = str(update.message.chat_id)
-    # context.user_data['chat_id'] = '123456780'
     chat_id = context.user_data['chat_id']
 
     response = supabase_client.table('ICs').select('*').execute()
@@ -99,7 +96,6 @@ async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 continue  
         else:
             print("Chosen date not found in worksheet:", worksheet.title)
-
 
 
 # CHOOSE_CLASS FUNCTION
@@ -318,8 +314,10 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 worksheet.update_cell(status_input_row, cell_column, alphanumeric_input)
 
                                 # No need to search further since the date and class were found
-                                assessment_result = f"Chat ID: {chat_id}\nDate: {current_date}\nChosen Class: {chosen_class}\nChosen AM or PM: {chosen_AMPM}\nPresent(Numeric Input): {numeric_input}\nStatus(Alphanumeric Input): {alphanumeric_input}"
-                                await update.message.reply_text(f"Assessment Result:\n{assessment_result}")
+                                # assessment_result = f"Chat ID: {chat_id}\nDate: {current_date}\nChosen Class: {chosen_class}\nChosen AM or PM: {chosen_AMPM}\nPresent(Numeric Input): {numeric_input}\nStatus(Alphanumeric Input): {alphanumeric_input}"
+                                # await update.message.reply_text(f"Assessment Result:\n{assessment_result}")
+                                message = "You have successfully inputted your attendance!"
+                                await update.message.reply_text(message)
                                 return ConversationHandler.END
                     except ValueError:
                         continue  # Ignore non-date values
@@ -374,8 +372,10 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 worksheet.update_cell(status_input_row, cell_column, alphanumeric_input)
 
                                 # No need to search further since the date and class were found
-                                assessment_result = f"Chat ID: {chat_id}\nDate: {current_date}\nChosen Class: {chosen_class}\nChosen AM or PM: {chosen_AMPM}\nPresent(Numeric Input): {numeric_input}\nStatus(Alphanumeric Input): {alphanumeric_input}"
-                                await update.message.reply_text(f"Assessment Result:\n{assessment_result}")
+                                # assessment_result = f"Chat ID: {chat_id}\nDate: {current_date}\nChosen Class: {chosen_class}\nChosen AM or PM: {chosen_AMPM}\nPresent(Numeric Input): {numeric_input}\nStatus(Alphanumeric Input): {alphanumeric_input}"
+                                # await update.message.reply_text(f"Assessment Result:\n{assessment_result}")
+                                message = "You have successfully inputted your attendance!"
+                                await update.message.reply_text(message)
                                 return ConversationHandler.END
                     except ValueError:
                         continue  # Ignore non-date values
@@ -421,7 +421,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/attendance - Start the attendance process\n"
         "/cancel - Cancel the current operation\n"
         "/about - Get help\n"
-        "/custom - Custom command\n"
         "\n"
         "Enjoy using PTSS Learnet Bot? Please give us some feedback! /feedback"
     )
@@ -439,8 +438,6 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ERROR FUNCTION
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.error(f"Update {update} caused error {context.error}")
-
-
 
 
 # TO RUN THE BOT
@@ -477,6 +474,3 @@ if __name__ == '__main__':
 
     # BOT POLLING
     app.run_polling(poll_interval=3)
-
-
-    
