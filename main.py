@@ -4,10 +4,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import gspread
 import logging
 from supabase import create_client
-from datetime import datetime
+from datetime import datetime, timezone
 import ast
 import os
 from dotenv import load_dotenv
+import pytz
 
 
 load_dotenv()
@@ -15,6 +16,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 current_date = datetime.now().strftime('%d/%m/%Y').lstrip('0').replace('/0', '/')
+utc_time = datetime.now(timezone.utc)
+local_timezone = pytz.timezone('Asia/Singapore')
+local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+current_time = local_time.strftime('%H%M')
 
 
 # SUPABASE
@@ -57,13 +62,16 @@ async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 chosen_class = row.get('chosen_class')
                 if chosen_class:
                     context.user_data['chosen_class'] = chosen_class
-                    keyboard = [
-                        [InlineKeyboardButton("AM", callback_data='AM')],
-                        [InlineKeyboardButton("PM", callback_data='PM')],
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await update.message.reply_text(f"Welcome back!\nYou have previously chosen class {chosen_class}.\nPlease choose AM or PM!", reply_markup=reply_markup)
-                    return CHOOSE_AMPM
+                    chosen_class = context.user_data['chosen_class']
+                    if int(current_time) < 1230:
+                        chosen_AMPM = 'AM'
+                    else:
+                        chosen_AMPM = 'PM'
+
+                    await update.message.reply_text(
+                        f"Welcome back! You have previously chosen {chosen_class} and you're inputting attendance for the {chosen_AMPM} session. Please input your attendance in 2 lines, first line for Present, second line for Status.\n\nFor e.g.\n3\n0(1x LD, 1x Rest In Bunk)"
+                        )
+                    return INPUT_ATTENDANCE
     for worksheet in sh.worksheets():
         dates_row = worksheet.row_values(4)
 
@@ -91,11 +99,35 @@ async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         reply_markup = InlineKeyboardMarkup(keyboard)
                         await update.message.reply_text('Good Day! Welcome to PTSS! Please select your class!', reply_markup=reply_markup)
                         return CHOOSE_CLASS
-                        break  
+                        break
             except ValueError:
-                continue  
+                continue
         else:
             print("Chosen date not found in worksheet:", worksheet.title)
+
+
+async def update_attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['chat_id'] = str(update.message.chat_id)
+    chat_id = context.user_data['chat_id']
+
+    response = supabase_client.table('ICs').select('*').execute()
+    data = response.data
+
+    if data:  # Check if data is not empty
+        for row in data:
+            if str(row.get('telegram_id')) == str(chat_id):
+                chosen_class = row.get('chosen_class')
+                if chosen_class:
+                    context.user_data['chosen_class'] = chosen_class
+                    keyboard = [
+                        [InlineKeyboardButton("AM", callback_data='AM')],
+                        [InlineKeyboardButton("PM", callback_data='PM')],
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await update.message.reply_text(f"Welcome back!\nYou have previously chosen class {chosen_class}.\nPlease choose AM or PM!", reply_markup=reply_markup)
+                    return CHOOSE_AMPM
+    await update.message.reply_text('You have not chosen a class before. Please use /attendance to choose a class')
+    return ConversationHandler.END
 
 
 # CHOOSE_CLASS FUNCTION
@@ -123,10 +155,10 @@ async def confirm_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_response == "confirm":
 
         chosen_class = context.user_data['chosen_class']
-        
+
         await query.edit_message_text(f"Great! You've chosen {chosen_class}. Please enter the password:")
         return AUTHENTICATION
-    
+
     elif user_response == 'back':
         # Same as attendance
         for worksheet in sh.worksheets():
@@ -156,12 +188,12 @@ async def confirm_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             reply_markup = InlineKeyboardMarkup(keyboard)
                             await query.edit_message_text('Good Day! Welcome to PTSS! Please select your class!', reply_markup=reply_markup)
                             return CHOOSE_CLASS
-                            break  
+                            break
                 except ValueError:
-                    continue  
+                    continue
             else:
                 print("Chosen date not found in worksheet:", worksheet.title)
-    
+
     return CONFIRM_CLASS
 
 
@@ -175,19 +207,19 @@ async def authentication(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await update.message.reply_text("Operation canceled. Type /attendance to start again.")
         return ConversationHandler.END
-    
+
     if user_password == correct_password:
+        if int(current_time) < 1230:
+            chosen_AMPM = 'AM'
+        else:
+            chosen_AMPM = 'PM'
+        chosen_class = context.user_data['chosen_class']
 
-        keyboard = [
-            [InlineKeyboardButton("AM", callback_data='AM')],
-            [InlineKeyboardButton("PM", callback_data='PM')],
-        ]
+        await update.message.reply_text(
+            f"Great! You've chosen {chosen_class} and you're inputting attendance for the {chosen_AMPM} session. Please input your attendance in 2 lines, first line for Present, second line for Status.\n\nFor e.g.\n3\n0(1x LD, 1x Rest In Bunk)"
+            )
+        return INPUT_ATTENDANCE
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text("Password accepted! Please choose AM or PM!", reply_markup=reply_markup)
-        return CHOOSE_AMPM
-    
     else:
         await update.message.reply_text("Incorrect password. Please try again or type /cancel to cancel.")
         return AUTHENTICATION
@@ -198,6 +230,7 @@ async def choose_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chosen_AMPM = query.data
     context.user_data['chosen_AMPM'] = chosen_AMPM
+
 
     keyboard = [
         [InlineKeyboardButton("Confirm", callback_data='confirm')],
@@ -216,7 +249,7 @@ async def confirm_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_response = query.data.lower()
 
     if user_response == "confirm":
-        
+
         chosen_AMPM = context.user_data['chosen_AMPM']
         chosen_class = context.user_data['chosen_class']
 
@@ -224,7 +257,7 @@ async def confirm_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Great! You've chosen {chosen_class} and {chosen_AMPM}. Please input your attendance in 2 lines, first line for Present, second line for Status.\n\nFor e.g.\n3\n0(1x LD, 1x Rest In Bunk)"
             )
         return INPUT_ATTENDANCE
-    
+
     elif user_response == 'back':
         # Same as authentication
         keyboard = [
@@ -236,9 +269,9 @@ async def confirm_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("Please choose AM or PM!", reply_markup=reply_markup)
         return CHOOSE_AMPM
-    
+
     return CONFIRM_AMPM
-       
+
 
 # INPUT_ATTENDANCE FUNCTION
 async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -252,20 +285,23 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(input_list) != 2:
         await update.message.reply_text("Invalid input. Please enter exactly two lines of data.")
         return INPUT_ATTENDANCE
-    
+
     numeric_input = input_list[0]
     alphanumeric_input = input_list[1]
 
     if numeric_input.isnumeric() and alphanumeric_input:
         chat_id = context.user_data["chat_id"]
         chosen_class = context.user_data['chosen_class']
-        chosen_AMPM = context.user_data['chosen_AMPM']
+        if int(current_time) < 1230:
+            chosen_AMPM = 'AM'
+        else:
+            chosen_AMPM = 'PM'
         response = supabase_client.table('ICs').select('*').execute()
         data = response.data
-    
+
         match_found = any(row.get('telegram_id') == chat_id for row in data)
 
-        
+
 
         if match_found:
             for worksheet in sh.worksheets():
@@ -293,7 +329,7 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             # Find the corresponding AM/PM label for the chosen date
                             ampm_labels = worksheet.row_values(8)
                             ampm_label = ampm_labels[index]
-                            
+
                             # Find the column index corresponding to the chosen class
                             class_column = worksheet.col_values(1)
                             class_row = class_column.index(chosen_class) + 1  # Add 1 to adjust for 0-based indexing
@@ -314,15 +350,12 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 worksheet.update_cell(status_input_row, cell_column, alphanumeric_input)
 
                                 # No need to search further since the date and class were found
-                                # assessment_result = f"Chat ID: {chat_id}\nDate: {current_date}\nChosen Class: {chosen_class}\nChosen AM or PM: {chosen_AMPM}\nPresent(Numeric Input): {numeric_input}\nStatus(Alphanumeric Input): {alphanumeric_input}"
-                                # await update.message.reply_text(f"Assessment Result:\n{assessment_result}")
                                 message = "You have successfully inputted your attendance!"
                                 await update.message.reply_text(message)
                                 return ConversationHandler.END
                     except ValueError:
                         continue  # Ignore non-date values
 
-        
         else:
             supabase_client.table("ICs").insert({"telegram_id":chat_id, "chosen_class":chosen_class}).execute()
             for worksheet in sh.worksheets():
@@ -351,7 +384,7 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             # Find the corresponding AM/PM label for the chosen date
                             ampm_labels = worksheet.row_values(8)
                             ampm_label = ampm_labels[index]
-                            
+
                             # Find the column index corresponding to the chosen class
                             class_column = worksheet.col_values(1)
                             class_row = class_column.index(chosen_class) + 1  # Add 1 to adjust for 0-based indexing
@@ -372,8 +405,142 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 worksheet.update_cell(status_input_row, cell_column, alphanumeric_input)
 
                                 # No need to search further since the date and class were found
-                                # assessment_result = f"Chat ID: {chat_id}\nDate: {current_date}\nChosen Class: {chosen_class}\nChosen AM or PM: {chosen_AMPM}\nPresent(Numeric Input): {numeric_input}\nStatus(Alphanumeric Input): {alphanumeric_input}"
-                                # await update.message.reply_text(f"Assessment Result:\n{assessment_result}")
+                                message = "You have successfully inputted your attendance!"
+                                await update.message.reply_text(message)
+                                return ConversationHandler.END
+                    except ValueError:
+                        continue  # Ignore non-date values
+    else:
+        await update.message.reply_text("Invalid input. Please enter numeric data followed by alphanumeric data.")
+        return INPUT_ATTENDANCE
+
+# UPDATE_ATTENDANCE FUNCTION
+async def update_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    input_list = update.message.text.strip().splitlines()
+
+    if update.message.text == '/cancel':
+        context.user_data.clear()
+        await update.message.reply_text("Operation canceled. Type /attendance to start again.")
+        return ConversationHandler.END
+
+    if len(input_list) != 2:
+        await update.message.reply_text("Invalid input. Please enter exactly two lines of data.")
+        return INPUT_ATTENDANCE
+
+    numeric_input = input_list[0]
+    alphanumeric_input = input_list[1]
+
+    if numeric_input.isnumeric() and alphanumeric_input:
+        chat_id = context.user_data["chat_id"]
+        chosen_class = context.user_data['chosen_class']
+        chosen_AMPM = context.user_data['chosen_AMPM']
+        response = supabase_client.table('ICs').select('*').execute()
+        data = response.data
+
+        match_found = any(row.get('telegram_id') == chat_id for row in data)
+
+        if match_found:
+            for worksheet in sh.worksheets():
+                # Get all dates from the current worksheet
+                dates_row = worksheet.row_values(4)
+                # Iterate over the dates and find the matching one
+                for index, date in enumerate(dates_row):
+                    try:
+                        # Convert both dates to datetime objects for comparison
+                        worksheet_date = datetime.strptime(date, "%d/%m/%Y").date()
+                        current_date_obj = datetime.strptime(current_date, "%d/%m/%Y").date()
+                        # Check if the dates match
+                        if worksheet_date == current_date_obj:
+                            # Retrieve all values from column A
+                            class_column = worksheet.col_values(1)
+                            # Find the index where "CLASS" appears
+                            class_index = class_column.index("CLASS") if "CLASS" in class_column else -1
+                            if class_index != -1:
+                                # Extract class names until 'STATUS' is encountered
+                                class_names = []
+                                for class_name in class_column[class_index + 1:]:
+                                    if class_name == 'STATUS':
+                                        break
+                                    class_names.append(class_name)
+                            # Find the corresponding AM/PM label for the chosen date
+                            ampm_labels = worksheet.row_values(8)
+                            ampm_label = ampm_labels[index]
+
+                            # Find the column index corresponding to the chosen class
+                            class_column = worksheet.col_values(1)
+                            class_row = class_column.index(chosen_class) + 1  # Add 1 to adjust for 0-based indexing
+
+                            if class_row != -1:
+                                # Calculate the cell coordinates (row, column) for the attendance
+                                present_input_row = class_row
+                                status_input_row = present_input_row + len(class_names) + 1
+                                if chosen_AMPM == 'AM':
+                                    cell_column = index + 1  # Add 1 to adjust for 0-based indexing
+                                else:  # chosen_AMPM == 'PM'
+                                    cell_column = index + 2  # Add 2 to adjust for 0-based indexing
+
+                                # Write the present_input value to the calculated cell
+                                worksheet.update_cell(present_input_row, cell_column, numeric_input)
+
+                                # Write the status_input to the calculated cell
+                                worksheet.update_cell(status_input_row, cell_column, alphanumeric_input)
+
+                                # No need to search further since the date and class were found
+                                message = "You have successfully inputted your attendance!"
+                                await update.message.reply_text(message)
+                                return ConversationHandler.END
+                    except ValueError:
+                        continue  # Ignore non-date values
+
+        else:
+            supabase_client.table("ICs").insert({"telegram_id":chat_id, "chosen_class":chosen_class}).execute()
+            for worksheet in sh.worksheets():
+                print("Processing worksheet:", worksheet.title)
+                # Get all dates from the current worksheet
+                dates_row = worksheet.row_values(4)
+                # Iterate over the dates and find the matching one
+                for index, date in enumerate(dates_row):
+                    try:
+                        # Convert both dates to datetime objects for comparison
+                        worksheet_date = datetime.strptime(date, "%d/%m/%Y").date()
+                        current_date_obj = datetime.strptime(current_date, "%d/%m/%Y").date()
+                        # Check if the dates match
+                        if worksheet_date == current_date_obj:
+                            # Retrieve all values from column A
+                            class_column = worksheet.col_values(1)
+                            # Find the index where "CLASS" appears
+                            class_index = class_column.index("CLASS") if "CLASS" in class_column else -1
+                            if class_index != -1:
+                                # Extract class names until 'STATUS' is encountered
+                                class_names = []
+                                for class_name in class_column[class_index + 1:]:
+                                    if class_name == 'STATUS':
+                                        break
+                                    class_names.append(class_name)
+                            # Find the corresponding AM/PM label for the chosen date
+                            ampm_labels = worksheet.row_values(8)
+                            ampm_label = ampm_labels[index]
+
+                            # Find the column index corresponding to the chosen class
+                            class_column = worksheet.col_values(1)
+                            class_row = class_column.index(chosen_class) + 1  # Add 1 to adjust for 0-based indexing
+
+                            if class_row != -1:
+                                # Calculate the cell coordinates (row, column) for the attendance
+                                present_input_row = class_row
+                                status_input_row = present_input_row + len(class_names) + 1
+                                if chosen_AMPM == 'AM':
+                                    cell_column = index + 1  # Add 1 to adjust for 0-based indexing
+                                else:  # chosen_AMPM == 'PM'
+                                    cell_column = index + 2  # Add 2 to adjust for 0-based indexing
+
+                                # Write the present_input value to the calculated cell
+                                worksheet.update_cell(present_input_row, cell_column, numeric_input)
+
+                                # Write the status_input to the calculated cell
+                                worksheet.update_cell(status_input_row, cell_column, alphanumeric_input)
+
+                                # No need to search further since the date and class were found
                                 message = "You have successfully inputted your attendance!"
                                 await update.message.reply_text(message)
                                 return ConversationHandler.END
@@ -408,7 +575,7 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if 'chosen_class' in context.user_data:
         del context.user_data['chosen_class']  # Clear the user data
-    
+
     context.user_data.clear()  # Clear all user data
     await update.message.reply_text("Operation canceled. Type /attendance to start again.")
     return ConversationHandler.END
@@ -458,10 +625,22 @@ if __name__ == '__main__':
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
 
-    
+    update_handler = ConversationHandler(
+        entry_points=[CommandHandler('update', update_attendance_command)],
+        states={
+            CHOOSE_AMPM: [CallbackQueryHandler(choose_AMPM)],
+            CONFIRM_AMPM: [CallbackQueryHandler(confirm_AMPM)],
+            INPUT_ATTENDANCE: [MessageHandler(filters.TEXT, update_attendance)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+
+
+
     # COMMANDS
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(conv_handler)
+    app.add_handler(update_handler)
     app.add_handler(CommandHandler('help', help_command))
     app.add_handler(CommandHandler('about', about_command))
     app.add_handler(CommandHandler('feedback', feedback_command))
