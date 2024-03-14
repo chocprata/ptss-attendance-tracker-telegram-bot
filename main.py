@@ -424,6 +424,22 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return INPUT_ATTENDANCE
 
 
+# LOGOUT COMMAND
+async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = str(update.message.chat_id)
+    
+    response = supabase_client.table('ICs').select('*').execute()
+    data = response.data
+
+    match_found = any(row.get('telegram_id') == chat_id for row in data)
+
+    if match_found:
+        supabase_client.table("ICs").delete().eq('telegram_id', chat_id).execute()
+        await update.message.reply_text(f'You have been successfully logged out!')
+    else:
+        await update.message.reply_text(f'You have not been logged in. Use /attendance to log in.')
+
+
 # FEEDBACK_COMMAND FUNCTION
 async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Please reply with your feedback. I will relay the message to my developer')
@@ -460,7 +476,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Good Day! You can use the following commands:\n"
         "/attendance - Start the attendance process\n"
         "/cancel - Cancel the current operation\n"
-        "/about - Get help\n"
+        "/update - Update your attendance (Use in the case where you inputted your attendance incorrectly)\n"
+        "/logout - To logout and stop receiving notifications\n"
+        "/about - Recieve info about the bot\n"
         "\n"
         "Enjoy using PTSS Learnet Bot? Please give us some feedback! /feedback"
     )
@@ -491,8 +509,6 @@ if __name__ == '__main__':
             CHOOSE_CLASS: [CallbackQueryHandler(choose_class)],
             CONFIRM_CLASS: [CallbackQueryHandler(confirm_class)],
             AUTHENTICATION: [MessageHandler(filters.TEXT, authentication)],
-            CHOOSE_AMPM: [CallbackQueryHandler(choose_AMPM)],
-            CONFIRM_AMPM: [CallbackQueryHandler(confirm_AMPM)],
             INPUT_ATTENDANCE: [MessageHandler(filters.TEXT, input_attendance)],
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
@@ -519,6 +535,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('feedback', feedback_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_feedback))
     app.add_handler(CommandHandler('cancel', cancel_command))
+    app.add_handler(CommandHandler('logout', logout_command))
 
     # ERRORS
     app.add_error_handler(error)
