@@ -10,17 +10,12 @@ import os
 from dotenv import load_dotenv
 import pytz
 
-
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-current_date = datetime.now().strftime('%d/%m/%Y').lstrip('0').replace('/0', '/')
-utc_time = datetime.now(timezone.utc)
-local_timezone = pytz.timezone('Asia/Singapore')
-local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
-current_time = local_time.strftime('%H%M')
 
+local_timezone = pytz.timezone('Asia/Singapore')
 
 # SUPABASE
 supabase_client= create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
@@ -34,7 +29,6 @@ TOKEN: Final = os.getenv('TOKEN')
 BOT_USERNAME: Final = os.getenv('BOT_USERNAME')
 MY_TELEGRAM_CHAT_ID = os.getenv('MY_TELEGRAM_CHAT_ID')
 
-
 # CONVERSATIONS
 CHOOSE_CLASS, CONFIRM_CLASS, AUTHENTICATION, CHOOSE_AMPM, CONFIRM_AMPM, INPUT_ATTENDANCE, FEEDBACK = range(7)
 
@@ -42,13 +36,20 @@ CHOOSE_CLASS, CONFIRM_CLASS, AUTHENTICATION, CHOOSE_AMPM, CONFIRM_AMPM, INPUT_AT
 CLASS_PASSWORDS = ast.literal_eval(os.getenv('CLASS_PASSWORDS'))
 
 
-# COMMANDS
-# START FUNCTION
+# START COMMAND
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Good Day! Welcome to PTSS Learner Bot! Type /attendance to input your attendance!")
+    await update.message.reply_text(
+        "Good Day! Welcome to PTSS Learner Bot! Type /attendance to input your attendance!\nYou can also use the following commands:\n\n"
+        "/cancel - Cancel the current operation\n"
+        "/update - Update your attendance (Use in the case where you inputted your attendance incorrectly)\n"
+        "/logout - To logout and stop receiving notifications\n"
+        "/about - Recieve info about the bot\n"
+        "\n"
+        "Enjoy using PTSS Learnet Bot? Please give us some feedback! /feedback"
+    )
 
 
-# START OF ATTENDANCE FUNCTION
+# ATTENDANCE COMMAND (START OF ATTENDANCE FUNCTION)
 async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['chat_id'] = str(update.message.chat_id)
     chat_id = context.user_data['chat_id']
@@ -64,6 +65,9 @@ async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if chosen_class:
                     context.user_data['chosen_class'] = chosen_class
                     chosen_class = context.user_data['chosen_class']
+                    utc_time = datetime.now(timezone.utc)
+                    local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+                    current_time = local_time.strftime('%H%M')
                     if int(current_time) < 1230:
                         chosen_AMPM = 'AM'
                     else:
@@ -78,6 +82,9 @@ async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         for index, date in enumerate(dates_row):
             try:
+                utc_time = datetime.now(timezone.utc)
+                local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+                current_date = local_time.strftime('%d/%m/%Y').lstrip('0').replace('/0', '/')
                 worksheet_date = datetime.strptime(date, "%d/%m/%Y").date()
                 current_date_obj = datetime.strptime(current_date, "%d/%m/%Y").date()
 
@@ -107,7 +114,7 @@ async def attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             print("Chosen date not found in worksheet:", worksheet.title)
 
 
-# UPDATE ATTENDANCE FUNCTION
+# UPDATE ATTENDANCE COMMAND (START OF UPDATE ATTENDANCE FUNCTION)
 async def update_attendance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['chat_id'] = str(update.message.chat_id)
     chat_id = context.user_data['chat_id']
@@ -133,7 +140,7 @@ async def update_attendance_command(update: Update, context: ContextTypes.DEFAUL
     return ConversationHandler.END
 
 
-# CHOOSE_CLASS FUNCTION
+# CHOOSE CLASS FUNCTION
 async def choose_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chosen_class = query.data
@@ -150,7 +157,7 @@ async def choose_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CONFIRM_CLASS
 
 
-# CONFIRM_CLASS FUNCTION
+# CONFIRM CLASS FUNCTION
 async def confirm_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_response = query.data.lower()
@@ -169,6 +176,9 @@ async def confirm_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             for index, date in enumerate(dates_row):
                 try:
+                    utc_time = datetime.now(timezone.utc)
+                    local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+                    current_date = local_time.strftime('%d/%m/%Y').lstrip('0').replace('/0', '/')
                     worksheet_date = datetime.strptime(date, "%d/%m/%Y").date()
                     current_date_obj = datetime.strptime(current_date, "%d/%m/%Y").date()
 
@@ -212,6 +222,9 @@ async def authentication(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     if user_password == correct_password:
+        utc_time = datetime.now(timezone.utc)
+        local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+        current_time = local_time.strftime('%H%M')
         if int(current_time) < 1230:
             chosen_AMPM = 'AM'
         else:
@@ -228,7 +241,7 @@ async def authentication(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return AUTHENTICATION
 
 
-# CHOOSE_AMPM FUNCTION
+# CHOOSE AM OR PM FUNCTION
 async def choose_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chosen_AMPM = query.data
@@ -246,7 +259,7 @@ async def choose_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CONFIRM_AMPM
 
 
-# CONFIRM_AMPM FUNCTION
+# CONFIRM AM OR PM FUNCTION
 async def confirm_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_response = query.data.lower()
@@ -276,7 +289,7 @@ async def confirm_AMPM(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CONFIRM_AMPM
 
 
-# INPUT_ATTENDANCE FUNCTION
+# INPUT ATTENDANCE FUNCTION
 async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     input_list = update.message.text.strip().splitlines()
 
@@ -298,13 +311,16 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         input_update = context.user_data['input_update']
 
         if input_update == 'input':
+            utc_time = datetime.now(timezone.utc)
+            local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+            current_time = local_time.strftime('%H%M')
             if int(current_time) < 1230:
                 chosen_AMPM = 'AM'
             else:
                 chosen_AMPM = 'PM'
         elif input_update == 'update':
             chosen_AMPM = context.user_data['chosen_AMPM']
-        
+
         response = supabase_client.table('ICs').select('*').execute()
         data = response.data
 
@@ -320,6 +336,9 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for index, date in enumerate(dates_row):
                     try:
                         # Convert both dates to datetime objects for comparison
+                        utc_time = datetime.now(timezone.utc)
+                        local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+                        current_date = local_time.strftime('%d/%m/%Y').lstrip('0').replace('/0', '/')
                         worksheet_date = datetime.strptime(date, "%d/%m/%Y").date()
                         current_date_obj = datetime.strptime(current_date, "%d/%m/%Y").date()
                         # Check if the dates match
@@ -375,6 +394,9 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for index, date in enumerate(dates_row):
                     try:
                         # Convert both dates to datetime objects for comparison
+                        utc_time = datetime.now(timezone.utc)
+                        local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(local_timezone)
+                        current_date = local_time.strftime('%d/%m/%Y').lstrip('0').replace('/0', '/')
                         worksheet_date = datetime.strptime(date, "%d/%m/%Y").date()
                         current_date_obj = datetime.strptime(current_date, "%d/%m/%Y").date()
                         # Check if the dates match
@@ -427,7 +449,7 @@ async def input_attendance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # LOGOUT COMMAND
 async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.message.chat_id)
-    
+
     response = supabase_client.table('ICs').select('*').execute()
     data = response.data
 
@@ -435,18 +457,18 @@ async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if match_found:
         supabase_client.table("ICs").delete().eq('telegram_id', chat_id).execute()
-        await update.message.reply_text(f'You have been successfully logged out!')
+        await update.message.reply_text('You have been successfully logged out!')
     else:
-        await update.message.reply_text(f'You have not been logged in. Use /attendance to log in.')
+        await update.message.reply_text('You have not been logged in. Use /attendance to log in.')
 
 
-# FEEDBACK_COMMAND FUNCTION
+# FEEDBACK COMMAND 
 async def feedback_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Please reply with your feedback. I will relay the message to my developer')
     context.user_data['expecting_feedback'] = True
 
 
-# HANDLE_FEEDBACK FUNCTION
+# FEEDBACK FUNCTION
 async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if 'expecting_feedback' in context.user_data and context.user_data['expecting_feedback']:
         feedback_text = update.message.text
@@ -460,7 +482,7 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('I was not expecting any feedback at this moment.')
 
 
-# CANCEL_COMMAND FUNCTION
+# CANCEL COMMAND
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if 'chosen_class' in context.user_data:
         del context.user_data['chosen_class']  # Clear the user data
@@ -470,7 +492,7 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# HELP_COMMAND FUNCTION
+# HELP COMMAND 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Good Day! You can use the following commands:\n"
@@ -484,7 +506,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ABOUT_COMMAND FUNCTION
+# ABOUT COMMAND 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "This bot was developed by PTSS, with the aims of digitalising exisiting training processes.\n"
@@ -493,7 +515,7 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ERROR FUNCTION
+# ERROR HANDLER
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.error(f"Update {update} caused error {context.error}")
 
