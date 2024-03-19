@@ -22,7 +22,7 @@ supabase_client= create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KE
 
 # GOOGLE SHEETS INFO
 sa = gspread.service_account(filename='service_account.json')
-sh = sa.open(" Learner Parade State - Mar")
+sh = sa.open(os.getenv('SH'))
 
 # TELEGRAM BOT INFO
 TOKEN: Final = os.getenv('TOKEN')
@@ -39,7 +39,7 @@ CLASS_PASSWORDS = ast.literal_eval(os.getenv('CLASS_PASSWORDS'))
 # START COMMAND
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Good Day! Welcome to PTSS Learner Bot! Type /attendance to input your attendance!\nYou can also use the following commands:\n\n"
+        "Good Day! Welcome to PTSS Learner Bot! Type /attendance to input your attendance!\n\nYou can also use the following commands:\n"
         "/cancel - Cancel the current operation\n"
         "/update - Update your attendance (Use in the case where you inputted your attendance incorrectly)\n"
         "/logout - To logout and stop receiving notifications\n"
